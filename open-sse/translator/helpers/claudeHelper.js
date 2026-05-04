@@ -1,5 +1,4 @@
 // Claude helper functions for translator
-import { DEFAULT_THINKING_CLAUDE_SIGNATURE } from "../../config/defaultThinkingSignature.js";
 import { adjustMaxTokens } from "./maxTokensHelper.js";
 import { applyCloaking } from "../../utils/claudeCloaking.js";
 import { deriveSessionId } from "../../utils/sessionManager.js";
@@ -162,11 +161,6 @@ export function prepareClaudeRequest(body, provider = null, apiKey = null, conne
 
     body.messages = filtered;
 
-    // Check if thinking is enabled AND last message is from user
-    const lastMessage = filtered[filtered.length - 1];
-    const lastMessageIsUser = lastMessage?.role === "user";
-    const thinkingEnabled = body.thinking?.type === "enabled" && lastMessageIsUser;
-
     // Pass 2 (reverse): add cache_control to last assistant + handle thinking for Anthropic
     let lastAssistantProcessed = false;
     for (let i = filtered.length - 1; i >= 0; i--) {
@@ -186,30 +180,13 @@ export function prepareClaudeRequest(body, provider = null, apiKey = null, conne
           lastAssistantProcessed = true;
         }
 
-        // Handle thinking blocks for Anthropic endpoint only
+        // Drop thinking blocks for Anthropic endpoint. Signatures are only valid
+        // when preserved verbatim from the exact Anthropic response. Synthetic
+        // defaults or cross-provider/model-switch history can trigger 400s.
         if (provider === "claude" || provider?.startsWith("anthropic-compatible")) {
-          let hasToolUse = false;
-          let hasThinking = false;
-
-          // Preserve existing signatures; only assign default when one is missing
-          for (const block of msg.content) {
-            if (block.type === "thinking" || block.type === "redacted_thinking") {
-              if (!block.signature) {
-                block.signature = DEFAULT_THINKING_CLAUDE_SIGNATURE;
-              }
-              hasThinking = true;
-            }
-            if (block.type === "tool_use") hasToolUse = true;
-          }
-
-          // Add thinking block if thinking enabled + has tool_use but no thinking
-          if (thinkingEnabled && !hasThinking && hasToolUse) {
-            msg.content.unshift({
-              type: "thinking",
-              thinking: ".",
-              signature: DEFAULT_THINKING_CLAUDE_SIGNATURE
-            });
-          }
+          msg.content = msg.content.filter(block =>
+            block.type !== "thinking" && block.type !== "redacted_thinking"
+          );
         }
       }
     }
