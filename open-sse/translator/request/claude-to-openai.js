@@ -114,6 +114,7 @@ function normalizeOpenAIContent(parts) {
     // Filter out empty text blocks before joining to avoid trailing "\n"
     // (Claude API rejects final assistant content ending with trailing whitespace)
     const nonEmpty = parts.filter((part) => part.text);
+    if (nonEmpty.length === 0) return "";
     return nonEmpty.map((part) => part.text).join("\n");
   }
   return parts.length === 1 && parts[0].type === "text" ? parts[0].text : parts;
