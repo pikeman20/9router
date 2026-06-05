@@ -78,6 +78,34 @@ export function fixToolUseOrdering(messages) {
 
 const CLAUDE_FORMAT_PROVIDERS_WITHOUT_OUTPUT_CONFIG = new Set(["minimax", "minimax-cn"]);
 
+// Extract role:system/developer messages from messages[] and merge into top-level system field.
+// Anthropic API rejects role:'system' in messages[]; it must be body.system.
+export function hoistSystemMessagesToClaudeSystem(body) {
+  if (!body?.messages || !Array.isArray(body.messages)) return;
+
+  const systemTexts = [];
+  body.messages = body.messages.filter(msg => {
+    if (msg.role === "system" || msg.role === "developer") {
+      const text = typeof msg.content === "string" ? msg.content
+        : Array.isArray(msg.content) ? msg.content.filter(b => b.type === "text").map(b => b.text).join("\n") : "";
+      if (text.trim()) systemTexts.push(text);
+      return false;
+    }
+    return true;
+  });
+
+  if (systemTexts.length === 0) return;
+
+  const promoted = { type: "text", text: systemTexts.join("\n") };
+  if (Array.isArray(body.system)) {
+    body.system = [...body.system, promoted];
+  } else if (typeof body.system === "string") {
+    body.system = [{ type: "text", text: body.system }, promoted];
+  } else {
+    body.system = [promoted];
+  }
+}
+
 // Prepare request for Claude format endpoints
 // - Cleanup cache_control
 // - Filter empty messages
@@ -104,29 +132,8 @@ export function prepareClaudeRequest(body, provider = null, apiKey = null, conne
 
   // 2. Messages: process in optimized passes
   if (body.messages && Array.isArray(body.messages)) {
-    // Extract any lingering system/developer messages from messages[] and promote to top-level system.
-    // Anthropic API rejects role:'system' in messages[]; it must be the top-level system field.
-    // This acts as a safety net for the passthrough path and any translation edge cases. Closes #1580.
-    const systemTexts = [];
-    body.messages = body.messages.filter(msg => {
-      if (msg.role === "system" || msg.role === "developer") {
-        const text = typeof msg.content === "string" ? msg.content
-          : Array.isArray(msg.content) ? msg.content.filter(b => b.type === "text").map(b => b.text).join("\n") : "";
-        if (text.trim()) systemTexts.push(text);
-        return false;
-      }
-      return true;
-    });
-    if (systemTexts.length > 0) {
-      const promoted = { type: "text", text: systemTexts.join("\n") };
-      if (Array.isArray(body.system)) {
-        body.system = [...body.system, promoted];
-      } else if (typeof body.system === "string") {
-        body.system = [{ type: "text", text: body.system }, promoted];
-      } else {
-        body.system = [promoted];
-      }
-    }
+    // Safety net for translation and passthrough edge cases.
+    hoistSystemMessagesToClaudeSystem(body);
 
     const len = body.messages.length;
     let filtered = [];
@@ -237,4 +244,3 @@ export function prepareClaudeRequest(body, provider = null, apiKey = null, conne
 
   return body;
 }
-

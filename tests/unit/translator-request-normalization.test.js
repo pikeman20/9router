@@ -4,6 +4,7 @@ import { FORMATS } from "../../open-sse/translator/formats.js";
 import { translateRequest } from "../../open-sse/translator/index.js";
 import { claudeToOpenAIRequest } from "../../open-sse/translator/request/claude-to-openai.js";
 import { filterToOpenAIFormat } from "../../open-sse/translator/helpers/openaiHelper.js";
+import { hoistSystemMessagesToClaudeSystem } from "../../open-sse/translator/helpers/claudeHelper.js";
 import { parseSSELine } from "../../open-sse/utils/streamHelpers.js";
 
 describe("request normalization", () => {
@@ -162,6 +163,26 @@ describe("request normalization", () => {
     );
 
     expect(result.output_config).toEqual(body.output_config);
+  });
+
+  it("hoistSystemMessagesToClaudeSystem removes role system/developer from messages", () => {
+    const body = {
+      system: [{ type: "text", text: "base" }],
+      messages: [
+        { role: "system", content: "rule A" },
+        { role: "developer", content: "rule B" },
+        { role: "user", content: [{ type: "text", text: "hello" }] },
+      ],
+    };
+
+    hoistSystemMessagesToClaudeSystem(body);
+
+    expect(body.messages).toHaveLength(1);
+    expect(body.messages[0].role).toBe("user");
+    expect(body.system).toEqual([
+      { type: "text", text: "base" },
+      { type: "text", text: "rule A\nrule B" },
+    ]);
   });
 
   it("parseSSELine supports provider raw NDJSON stream lines", () => {

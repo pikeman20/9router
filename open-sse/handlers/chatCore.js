@@ -19,6 +19,7 @@ import { detectClientTool, isNativePassthrough } from "../utils/clientDetector.j
 import { dedupeTools } from "../utils/toolDeduper.js";
 import { injectCaveman } from "../rtk/caveman.js";
 import { compressMessages, formatRtkLog } from "../rtk/index.js";
+import { hoistSystemMessagesToClaudeSystem } from "../translator/helpers/claudeHelper.js";
 
 /**
  * Core chat handler - shared between SSE and Worker
@@ -90,6 +91,9 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (passthrough) {
     log?.debug?.("PASSTHROUGH", `${clientTool} → ${provider} | native lossless`);
     translatedBody = { ...body, model };
+    if (targetFormat === FORMATS.CLAUDE) {
+      hoistSystemMessagesToClaudeSystem(translatedBody);
+    }
   } else {
     translatedBody = translateRequest(sourceFormat, targetFormat, model, body, stream, credentials, provider, reqLogger, stripList, connectionId, clientTool);
     if (!translatedBody) {
