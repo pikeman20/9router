@@ -51,7 +51,7 @@ export function filterToOpenAIFormat(body) {
       }
 
       const content = filteredContent.every((block) => block.type === "text")
-        ? filteredContent.map((block) => block.text || "").join("\n")
+        ? filteredContent.filter((block) => block.text).map((block) => block.text).join("\n")
         : filteredContent;
       return { ...msg, content };
     }
