@@ -7,7 +7,7 @@
 import "open-sse/index.js";
 import crypto from "crypto";
 
-import { generatePKCE, generateState } from "./utils/pkce";
+import { generatePKCE, generateState, extractProfileArnFromIdToken } from "./utils/pkce";
 import {
   CLAUDE_CONFIG,
   CODEX_CONFIG,
@@ -977,20 +977,7 @@ const PROVIDERS = {
       // AWS SSO OIDC may return profileArn directly in the token response.
       // For Organization (IDC) auth it is sometimes absent from the top-level
       // response but present as a claim inside the idToken JWT.
-      let profileArn = tokens?.profile_arn || null;
-      if (!profileArn && tokens.id_token) {
-        try {
-          const parts = tokens.id_token.split(".");
-          if (parts.length === 3) {
-            let payload = parts[1];
-            while (payload.length % 4) payload += "=";
-            const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-            profileArn = decoded.arn || decoded.profileArn || null;
-          }
-        } catch (e) {
-          // Silently fail - profileArn extraction from JWT is best-effort
-        }
-      }
+      const profileArn = tokens?.profile_arn || extractProfileArnFromIdToken(tokens.id_token);
 
       const mapped = {
         accessToken: tokens.access_token,
