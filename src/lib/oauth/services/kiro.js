@@ -1,4 +1,5 @@
 import { KIRO_CONFIG } from "../constants/oauth.js";
+import { extractProfileArnFromIdToken } from "../utils/pkce.js";
 
 /**
  * Kiro OAuth Service
@@ -197,9 +198,16 @@ export class KiroService {
       }
 
       const data = await response.json();
+
+      // AWS SSO OIDC returns profileArn directly in the response.
+      // For Organization (IDC) auth it may be absent from the top-level but
+      // present as a claim inside the idToken JWT.
+      const profileArn = data.profileArn || extractProfileArnFromIdToken(data.idToken);
+
       return {
         accessToken: data.accessToken,
         refreshToken: data.refreshToken || refreshToken,
+        profileArn,
         expiresIn: data.expiresIn,
       };
     }

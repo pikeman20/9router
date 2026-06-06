@@ -7,7 +7,7 @@
 import "open-sse/index.js";
 import crypto from "crypto";
 
-import { generatePKCE, generateState } from "./utils/pkce";
+import { generatePKCE, generateState, extractProfileArnFromIdToken } from "./utils/pkce";
 import {
   CLAUDE_CONFIG,
   CODEX_CONFIG,
@@ -951,6 +951,7 @@ const PROVIDERS = {
             access_token: data.accessToken,
             refresh_token: data.refreshToken,
             expires_in: data.expiresIn,
+            id_token: data.idToken || null,
             profile_arn: data?.profileArn || null,
             // Store client credentials for refresh
             _clientId: extraData?._clientId,
@@ -972,13 +973,19 @@ const PROVIDERS = {
     },
     mapTokens: (tokens) => {
       const email = extractEmailFromAccessToken(tokens.access_token);
+
+      // AWS SSO OIDC may return profileArn directly in the token response.
+      // For Organization (IDC) auth it is sometimes absent from the top-level
+      // response but present as a claim inside the idToken JWT.
+      const profileArn = tokens?.profile_arn || extractProfileArnFromIdToken(tokens.id_token);
+
       const mapped = {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresIn: tokens.expires_in,
         email,
         providerSpecificData: {
-          profileArn: tokens?.profile_arn || null,
+          profileArn,
           clientId: tokens._clientId,
           clientSecret: tokens._clientSecret,
           region: tokens._region || "us-east-1",
