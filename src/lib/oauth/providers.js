@@ -951,6 +951,7 @@ const PROVIDERS = {
             access_token: data.accessToken,
             refresh_token: data.refreshToken,
             expires_in: data.expiresIn,
+            id_token: data.idToken || null,
             profile_arn: data?.profileArn || null,
             // Store client credentials for refresh
             _clientId: extraData?._clientId,
@@ -972,13 +973,32 @@ const PROVIDERS = {
     },
     mapTokens: (tokens) => {
       const email = extractEmailFromAccessToken(tokens.access_token);
+
+      // AWS SSO OIDC may return profileArn directly in the token response.
+      // For Organization (IDC) auth it is sometimes absent from the top-level
+      // response but present as a claim inside the idToken JWT.
+      let profileArn = tokens?.profile_arn || null;
+      if (!profileArn && tokens.id_token) {
+        try {
+          const parts = tokens.id_token.split(".");
+          if (parts.length === 3) {
+            let payload = parts[1];
+            while (payload.length % 4) payload += "=";
+            const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+            profileArn = decoded.arn || decoded.profileArn || null;
+          }
+        } catch (e) {
+          // Silently fail - profileArn extraction from JWT is best-effort
+        }
+      }
+
       const mapped = {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresIn: tokens.expires_in,
         email,
         providerSpecificData: {
-          profileArn: tokens?.profile_arn || null,
+          profileArn,
           clientId: tokens._clientId,
           clientSecret: tokens._clientSecret,
           region: tokens._region || "us-east-1",
