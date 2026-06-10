@@ -69,8 +69,8 @@ export class DefaultExecutor extends BaseExecutor {
   }
 
   transformRequest(model, body) {
-    const transformed = this.applyJsonSchemaFallback(body);
-    const transformed = injectReasoningContent({ provider: this.provider, model, body: transformed });
+    const transformedBody = this.applyJsonSchemaFallback(body);
+    const transformed = injectReasoningContent({ provider: this.provider, model, body: transformedBody });
     if (this.provider === "claude" || this.provider?.startsWith?.("anthropic-compatible-")) {
       return sanitizeAnthropicMessages(transformed);
     }
