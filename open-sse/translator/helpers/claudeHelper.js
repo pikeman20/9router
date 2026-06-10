@@ -191,10 +191,12 @@ export function prepareClaudeRequest(body, provider = null, apiKey = null, conne
           let hasToolUse = false;
           let hasThinking = false;
 
-          // Always replace signature for all thinking blocks
+          // Preserve existing signatures; only assign default when one is missing
           for (const block of msg.content) {
             if (block.type === "thinking" || block.type === "redacted_thinking") {
-              block.signature = DEFAULT_THINKING_CLAUDE_SIGNATURE;
+              if (!block.signature) {
+                block.signature = DEFAULT_THINKING_CLAUDE_SIGNATURE;
+              }
               hasThinking = true;
             }
             if (block.type === "tool_use") hasToolUse = true;
