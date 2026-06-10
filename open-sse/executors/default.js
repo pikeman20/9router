@@ -10,12 +10,7 @@ function sanitizeAnthropicToolId(id) {
   if (typeof id !== "string") return id;
   const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
   if (sanitized) return sanitized;
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    // 31 is a common small prime used for simple rolling string hashes.
-    hash = ((hash * 31) + id.charCodeAt(i)) >>> 0;
-  }
-  return `tool_call_${hash.toString(36)}`;
+  return `tool_call_${Buffer.from(id).toString("hex")}`;
 }
 
 function sanitizeAnthropicMessages(body) {
@@ -25,6 +20,7 @@ function sanitizeAnthropicMessages(body) {
   const messages = body.messages.map(message => {
     if (!Array.isArray(message?.content)) return message;
 
+    let messageChanged = false;
     const content = [];
     for (const block of message.content) {
       if (!block || typeof block !== "object") {
@@ -37,27 +33,33 @@ function sanitizeAnthropicMessages(body) {
       // causes Anthropic to reject the request with invalid/empty thinking.
       if (block.type === "thinking" || block.type === "redacted_thinking") {
         changed = true;
+        messageChanged = true;
         continue;
       }
       if (block.type === "tool_use" && typeof block.id === "string") {
         const id = sanitizeAnthropicToolId(block.id);
         content.push(id === block.id ? block : { ...block, id });
-        changed ||= id !== block.id;
+        const idChanged = id !== block.id;
+        changed ||= idChanged;
+        messageChanged ||= idChanged;
         continue;
       }
       if (block.type === "tool_result" && typeof block.tool_use_id === "string") {
         const tool_use_id = sanitizeAnthropicToolId(block.tool_use_id);
         content.push(tool_use_id === block.tool_use_id ? block : { ...block, tool_use_id });
-        changed ||= tool_use_id !== block.tool_use_id;
+        const toolIdChanged = tool_use_id !== block.tool_use_id;
+        changed ||= toolIdChanged;
+        messageChanged ||= toolIdChanged;
         continue;
       }
       content.push(block);
     }
 
-    if (content.length !== message.content.length) changed = true;
-    return content.length === message.content.length && content.every((block, i) => block === message.content[i])
-      ? message
-      : { ...message, content };
+    if (content.length !== message.content.length) {
+      changed = true;
+      messageChanged = true;
+    }
+    return messageChanged ? { ...message, content } : message;
   }).filter(message => {
     if (Array.isArray(message?.content)) {
       const keep = message.content.length > 0;
