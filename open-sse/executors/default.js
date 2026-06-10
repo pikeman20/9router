@@ -8,7 +8,13 @@ import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 
 function sanitizeAnthropicToolId(id) {
   if (typeof id !== "string") return id;
-  return id.replace(/[^a-zA-Z0-9_-]/g, "") || "tool_call";
+  const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (sanitized) return sanitized;
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash * 31) + id.charCodeAt(i)) >>> 0;
+  }
+  return `tool_call_${hash.toString(36)}`;
 }
 
 function sanitizeAnthropicMessages(body) {
