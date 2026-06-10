@@ -180,9 +180,8 @@ export function prepareClaudeRequest(body, provider = null, apiKey = null, conne
           lastAssistantProcessed = true;
         }
 
-        // Drop thinking blocks for Anthropic endpoint. Signatures are only valid
-        // when preserved verbatim from the exact Anthropic response. Synthetic
-        // defaults or cross-provider/model-switch history can trigger 400s.
+        // Drop thinking blocks for Anthropic endpoint because synthetic or
+        // cross-provider/model-switch history can trigger 400 validation errors.
         if (provider === "claude" || provider?.startsWith("anthropic-compatible")) {
           msg.content = msg.content.filter(block =>
             block.type !== "thinking" && block.type !== "redacted_thinking"

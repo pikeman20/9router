@@ -12,6 +12,7 @@ function sanitizeAnthropicToolId(id) {
   if (sanitized) return sanitized;
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
+    // 31 is a common small prime used for simple rolling string hashes.
     hash = ((hash * 31) + id.charCodeAt(i)) >>> 0;
   }
   return `tool_call_${hash.toString(36)}`;
@@ -77,7 +78,7 @@ export class DefaultExecutor extends BaseExecutor {
   transformRequest(model, body) {
     const transformedBody = this.applyJsonSchemaFallback(body);
     const transformed = injectReasoningContent({ provider: this.provider, model, body: transformedBody });
-    if (this.provider === "claude" || this.provider?.startsWith?.("anthropic-compatible-")) {
+    if (this.provider === "claude" || this.provider?.startsWith?.("anthropic-compatible")) {
       return sanitizeAnthropicMessages(transformed);
     }
     return transformed;
