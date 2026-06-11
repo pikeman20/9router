@@ -245,6 +245,26 @@ async function createBypassRequest(parsedUrl, realIP, options) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
 
+    // Wire up AbortSignal so stall-timer aborts reach the underlying connection.
+    let abortListener = null;
+    if (options.signal) {
+      if (options.signal.aborted) {
+        reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
+        return;
+      }
+      abortListener = () => {
+        socket.destroy(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
+      };
+      options.signal.addEventListener("abort", abortListener, { once: true });
+    }
+
+    const cleanup = () => {
+      if (abortListener && options.signal) {
+        options.signal.removeEventListener("abort", abortListener);
+        abortListener = null;
+      }
+    };
+
     socket.connect(HTTPS_PORT, realIP, () => {
       const reqOptions = {
         socket,
@@ -264,6 +284,7 @@ async function createBypassRequest(parsedUrl, realIP, options) {
       };
 
       const req = https.request(reqOptions, (res) => {
+        cleanup();
         const response = {
           ok: res.statusCode >= HTTP_SUCCESS_MIN && res.statusCode < HTTP_SUCCESS_MAX,
           status: res.statusCode,
@@ -280,14 +301,14 @@ async function createBypassRequest(parsedUrl, realIP, options) {
         resolve(response);
       });
 
-      req.on("error", reject);
+      req.on("error", (e) => { cleanup(); reject(e); });
       if (options.body) {
         req.write(typeof options.body === "string" ? options.body : JSON.stringify(options.body));
       }
       req.end();
     });
 
-    socket.on("error", reject);
+    socket.on("error", (e) => { cleanup(); reject(e); });
   });
 }
 
