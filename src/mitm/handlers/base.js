@@ -86,47 +86,64 @@ async function pipeTransformedSSE(routerRes, res, transformFn, state) {
     return;
   }
 
+  // Stop reading from upstream as soon as the client disconnects.
+  let clientGone = false;
+  const onClientClose = () => { clientGone = true; };
+  res.socket?.once("close", onClientClose);
+
   const reader = routerRes.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: false });
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      if (clientGone) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith("data:")) continue;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-      const data = trimmed.slice(5).trim();
-      if (data === "[DONE]") continue;
+      for (const line of lines) {
+        if (clientGone) break;
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
 
-      if (process.env.DEBUG_MITM) {
-        log(`[SSE in] ${data.slice(0, 200)}`);
-      }
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") continue;
 
-      try {
-        const parsed = JSON.parse(data);
-        const result = transformFn(parsed, state);
-        if (result != null) {
-          const outputs = Array.isArray(result) ? result : [result];
-          for (const output of outputs) {
-            if (process.env.DEBUG_MITM) {
-              const len = output.length || output.byteLength || 0;
-              log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
-            }
-            res.write(Buffer.from(output));
-          }
+        if (process.env.DEBUG_MITM) {
+          log(`[SSE in] ${data.slice(0, 200)}`);
         }
-      } catch {
-        // Skip unparseable lines
+
+        try {
+          const parsed = JSON.parse(data);
+          const result = transformFn(parsed, state);
+          if (result != null) {
+            const outputs = Array.isArray(result) ? result : [result];
+            for (const output of outputs) {
+              if (process.env.DEBUG_MITM) {
+                const len = output.length || output.byteLength || 0;
+                log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
+              }
+              if (!res.writableEnded && !res.destroyed) res.write(Buffer.from(output));
+            }
+          }
+        } catch {
+          continue; // Skip unparseable lines
+        }
       }
     }
+  } catch {
+    // Upstream read error — cancel cleanly
+  } finally {
+    res.socket?.removeListener("close", onClientClose);
+    reader.cancel().catch(() => {});
   }
+
+  if (clientGone || res.writableEnded || res.destroyed) return;
 
   // Flush: pass null to signal stream end
   try {
@@ -167,47 +184,64 @@ async function pipeTransformedEventStream(routerRes, res, transformFn, state) {
     return;
   }
 
+  // Stop reading from upstream as soon as the client disconnects.
+  let clientGone = false;
+  const onClientClose = () => { clientGone = true; };
+  res.socket?.once("close", onClientClose);
+
   const reader = routerRes.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: false });
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      if (clientGone) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith("data:")) continue;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-      const data = trimmed.slice(5).trim();
-      if (data === "[DONE]") continue;
+      for (const line of lines) {
+        if (clientGone) break;
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
 
-      if (process.env.DEBUG_MITM) {
-        log(`[SSE in] ${data.slice(0, 200)}`);
-      }
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") continue;
 
-      try {
-        const parsed = JSON.parse(data);
-        const result = transformFn(parsed, state);
-        if (result != null) {
-          const outputs = Array.isArray(result) ? result : [result];
-          for (const output of outputs) {
-            if (process.env.DEBUG_MITM) {
-              const len = output.length || output.byteLength || 0;
-              log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
-            }
-            res.write(Buffer.from(output));
-          }
+        if (process.env.DEBUG_MITM) {
+          log(`[SSE in] ${data.slice(0, 200)}`);
         }
-      } catch {
-        // Skip unparseable lines
+
+        try {
+          const parsed = JSON.parse(data);
+          const result = transformFn(parsed, state);
+          if (result != null) {
+            const outputs = Array.isArray(result) ? result : [result];
+            for (const output of outputs) {
+              if (process.env.DEBUG_MITM) {
+                const len = output.length || output.byteLength || 0;
+                log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
+              }
+              if (!res.writableEnded && !res.destroyed) res.write(Buffer.from(output));
+            }
+          }
+        } catch {
+          continue; // Skip unparseable lines
+        }
       }
     }
+  } catch {
+    // Upstream read error — cancel cleanly
+  } finally {
+    res.socket?.removeListener("close", onClientClose);
+    reader.cancel().catch(() => {});
   }
+
+  if (clientGone || res.writableEnded || res.destroyed) return;
 
   // Flush: pass null to signal stream end
   try {
