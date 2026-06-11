@@ -118,23 +118,21 @@ async function pipeTransformedSSE(routerRes, res, transformFn, state) {
           log(`[SSE in] ${data.slice(0, 200)}`);
         }
 
-        let parsed;
         try {
-          parsed = JSON.parse(data);
+          const parsed = JSON.parse(data);
+          const result = transformFn(parsed, state);
+          if (result != null) {
+            const outputs = Array.isArray(result) ? result : [result];
+            for (const output of outputs) {
+              if (process.env.DEBUG_MITM) {
+                const len = output.length || output.byteLength || 0;
+                log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
+              }
+              if (!res.writableEnded && !res.destroyed) res.write(Buffer.from(output));
+            }
+          }
         } catch {
           continue; // Skip unparseable lines
-        }
-
-        const result = transformFn(parsed, state);
-        if (result != null) {
-          const outputs = Array.isArray(result) ? result : [result];
-          for (const output of outputs) {
-            if (process.env.DEBUG_MITM) {
-              const len = output.length || output.byteLength || 0;
-              log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
-            }
-            if (!res.writableEnded && !res.destroyed) res.write(Buffer.from(output));
-          }
         }
       }
     }
@@ -218,23 +216,21 @@ async function pipeTransformedEventStream(routerRes, res, transformFn, state) {
           log(`[SSE in] ${data.slice(0, 200)}`);
         }
 
-        let parsed;
         try {
-          parsed = JSON.parse(data);
+          const parsed = JSON.parse(data);
+          const result = transformFn(parsed, state);
+          if (result != null) {
+            const outputs = Array.isArray(result) ? result : [result];
+            for (const output of outputs) {
+              if (process.env.DEBUG_MITM) {
+                const len = output.length || output.byteLength || 0;
+                log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
+              }
+              if (!res.writableEnded && !res.destroyed) res.write(Buffer.from(output));
+            }
+          }
         } catch {
           continue; // Skip unparseable lines
-        }
-
-        const result = transformFn(parsed, state);
-        if (result != null) {
-          const outputs = Array.isArray(result) ? result : [result];
-          for (const output of outputs) {
-            if (process.env.DEBUG_MITM) {
-              const len = output.length || output.byteLength || 0;
-              log(`[write binary frame] (${len}B) first 20B: ${Array.from(output.slice(0, 20)).join(',')}`);
-            }
-            if (!res.writableEnded && !res.destroyed) res.write(Buffer.from(output));
-          }
         }
       }
     }

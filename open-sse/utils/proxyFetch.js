@@ -247,6 +247,13 @@ async function createBypassRequest(parsedUrl, realIP, options) {
 
     // Wire up AbortSignal so stall-timer aborts reach the underlying connection.
     let abortListener = null;
+    const cleanup = () => {
+      if (abortListener && options.signal) {
+        options.signal.removeEventListener("abort", abortListener);
+        abortListener = null;
+      }
+    };
+
     if (options.signal) {
       if (options.signal.aborted) {
         reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
@@ -257,13 +264,6 @@ async function createBypassRequest(parsedUrl, realIP, options) {
       };
       options.signal.addEventListener("abort", abortListener, { once: true });
     }
-
-    const cleanup = () => {
-      if (abortListener && options.signal) {
-        options.signal.removeEventListener("abort", abortListener);
-        abortListener = null;
-      }
-    };
 
     socket.connect(HTTPS_PORT, realIP, () => {
       const reqOptions = {
